@@ -1,9 +1,7 @@
 import json
 import os
-
 import time
 from datetime import timedelta
-
 from time import sleep
 
 import pandas as pd
@@ -80,38 +78,96 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.reindex(columns=COLUMN_ORDER)
 
 
-def load_existing_results(path: str):
-    if os.path.exists(path):
-        try:
-            df = pd.read_csv(
-                path,
-                dtype={
-                    "row_id": "Int64",
-                    "id": str,
-                    "title": str,
-                    "abstract": str,
-                    "year": str,
-                    "primary_code": str,
-                    "secondary_codes": str,
-                    "top_k_codes": str,
-                    "top1_code": str,
-                    "top1_similarity": str,
-                    "top2_code": str,
-                    "top2_similarity": str,
-                },
-            )
-            print(f"🟡 Resume da file esistente: {len(df)} righe")
-            return reorder_columns(df)
-        except Exception as e:
-            print(f"⚠️ Errore caricando output esistente: {e}")
-    return None
+def load_existing_results(path: str) -> pd.DataFrame | None:
+    """
+    Carica il file di output esistente per il resume.
+    Il resume è basato su 'id' del brevetto.
+    """
+    if not os.path.exists(path):
+        return None
+
+    try:
+        df = pd.read_csv(
+            path,
+            dtype={
+                "row_id": "Int64",
+                "id": str,
+                "title": str,
+                "abstract": str,
+                "year": str,
+                "primary_code": str,
+                "secondary_codes": str,
+                "top_k_codes": str,
+                "top1_code": str,
+                "top1_similarity": str,
+                "top2_code": str,
+                "top2_similarity": str,
+            },
+        )
+
+        df = reorder_columns(df)
+
+        if "id" not in df.columns:
+            raise ValueError("La colonna 'id' non è presente nel file di output.")
+
+        df["id"] = df["id"].astype(str).str.strip()
+        df = df.dropna(subset=["id"]).copy()
+
+        # deduplica per id
+        df = df.drop_duplicates(subset=["id"], keep="last").reset_index(drop=True)
+
+        print(f"🟡 Resume da file esistente: {len(df)} righe")
+
+        if len(df) > 0:
+            print(f"🟡 Ultimo id presente nel file: {df['id'].iloc[-1]}")
+
+        return df
+
+    except Exception as e:
+        print(f"⚠️ Errore caricando output esistente: {e}")
+        return None
 
 
-def save_checkpoint(df: pd.DataFrame, path: str) -> None:
+def append_checkpoint(rows: list[dict], path: str) -> None:
+    """
+    Salva solo le nuove righe in append.
+    In questo modo il resume riparte da ciò che è davvero già scritto nel CSV.
+    """
+    if not rows:
+        return
+
+    df = pd.DataFrame(rows)
     df = reorder_columns(df)
-    df = df.drop_duplicates(subset=["row_id"], keep="last")
-    df.to_csv(path, index=False)
-    print(f"💾 Checkpoint salvato: {len(df)} righe")
+
+    file_exists = os.path.exists(path)
+    write_header = not file_exists or os.path.getsize(path) == 0
+
+    df.to_csv(
+        path,
+        mode="a",
+        header=write_header,
+        index=False,
+    )
+
+    print(f"💾 Checkpoint salvato: +{len(df)} righe")
+
+
+def save_final_snapshot(path: str) -> pd.DataFrame | None:
+    """
+    Rilegge il file finale, deduplica per id e lo risalva pulito.
+    """
+    final_df = load_existing_results(path)
+    if final_df is None:
+        return None
+
+    final_df = reorder_columns(final_df)
+    final_df = final_df.drop_duplicates(subset=["id"], keep="last").reset_index(
+        drop=True
+    )
+    final_df.to_csv(path, index=False)
+
+    print(f"💾 Snapshot finale salvato: {len(final_df)} righe")
+    return final_df
 
 
 def serialize_secondary_codes(value) -> str:
@@ -195,6 +251,36 @@ def classify_single_patent(
     return clean_result, top_k_df
 
 
+def build_output_row(row: pd.Series, result: dict, top_k_df: pd.DataFrame) -> dict:
+    output_row = dict(result)
+
+    output_row["row_id"] = int(row["row_id"])
+    output_row["id"] = str(row["id"]).strip()
+    output_row["title"] = str(row["title"]).strip()
+    output_row["abstract"] = str(row["abstract"]).strip()
+    output_row["year"] = str(row.get("year", "")).strip()
+    output_row["primary_code"] = str(output_row.get("primary_code", "")).strip()
+    output_row["secondary_codes"] = serialize_secondary_codes(
+        output_row.get("secondary_codes", [])
+    )
+
+    # diagnostica retrieval
+    top_k_codes = top_k_df["code"].astype(str).tolist()
+    output_row["top_k_codes"] = json.dumps(top_k_codes, ensure_ascii=False)
+
+    output_row["top1_code"] = top_k_codes[0] if len(top_k_codes) > 0 else ""
+    output_row["top1_similarity"] = (
+        float(top_k_df.iloc[0]["similarity"]) if len(top_k_df) > 0 else None
+    )
+
+    output_row["top2_code"] = top_k_codes[1] if len(top_k_codes) > 1 else ""
+    output_row["top2_similarity"] = (
+        float(top_k_df.iloc[1]["similarity"]) if len(top_k_df) > 1 else None
+    )
+
+    return output_row
+
+
 # -----------------------------------------------------------
 # MAIN
 # -----------------------------------------------------------
@@ -202,7 +288,6 @@ def classify_single_patent(
 
 def main():
     ensure_directories()
-
     start_time = time.time()
 
     print("🔹 Caricamento client OpenAI...")
@@ -217,107 +302,107 @@ def main():
 
     patents_df = patents_df.reset_index(drop=True)
     patents_df["row_id"] = patents_df.index.astype(int)
+    patents_df["id"] = patents_df["id"].astype(str).str.strip()
+
+    total = len(patents_df)
+    current_ids = set(patents_df["id"].tolist())
 
     print("🔹 Caricamento embedding NACE...")
     nace_embeddings_df = pd.read_parquet(NACE_EMBEDDINGS_PATH)
-
     valid_codes = set(nace_embeddings_df["code"].astype(str).str.strip())
 
     existing_df = load_existing_results(OUTPUT_PATH) if RESUME_IF_EXISTS else None
-    done_ids = set(existing_df["row_id"]) if existing_df is not None else set()
-
-    results = []
-
-    for _, row in patents_df.iterrows():
-        row_id = row["row_id"]
-
-        if row_id in done_ids:
-            continue
-
-        processed = len(results) + (len(existing_df) if existing_df is not None else 0)
-
-        if processed % LOG_EVERY == 0:
-            total = len(patents_df)
-            print(f"📊 Progress: {processed}/{total} ({processed/total:.1%})")
-
-        result, top_k_df = classify_single_patent(
-            row=row,
-            nace_embeddings_df=nace_embeddings_df,
-            client=client,
-            valid_codes=valid_codes,
-        )
-
-        result["row_id"] = row_id
-        result["id"] = str(row["id"]).strip()
-        result["title"] = str(row["title"]).strip()
-        result["abstract"] = str(row["abstract"]).strip()
-        result["year"] = str(row.get("year", "")).strip()
-        result["primary_code"] = str(result.get("primary_code", "")).strip()
-        result["secondary_codes"] = serialize_secondary_codes(
-            result.get("secondary_codes", [])
-        )
-
-        # diagnostica retrieval
-        top_k_codes = top_k_df["code"].astype(str).tolist()
-        result["top_k_codes"] = json.dumps(top_k_codes, ensure_ascii=False)
-
-        result["top1_code"] = top_k_codes[0] if len(top_k_codes) > 0 else ""
-        result["top1_similarity"] = (
-            float(top_k_df.iloc[0]["similarity"]) if len(top_k_df) > 0 else None
-        )
-
-        result["top2_code"] = top_k_codes[1] if len(top_k_codes) > 1 else ""
-        result["top2_similarity"] = (
-            float(top_k_df.iloc[1]["similarity"]) if len(top_k_df) > 1 else None
-        )
-
-        results.append(result)
-
-        processed = len(results) + (len(existing_df) if existing_df is not None else 0)
-
-        if processed % LOG_EVERY == 0:
-            elapsed = time.time() - start_time
-            rate = processed / elapsed if elapsed > 0 else 0
-
-            total = len(patents_df)
-            remaining = total - processed
-
-            eta_seconds = remaining / rate if rate > 0 else 0
-
-            print(
-                f"📊 Progress: {processed}/{total} "
-                f"({processed/total:.1%}) | "
-                f"⏱ elapsed: {timedelta(seconds=int(elapsed))} | "
-                f"🚀 rate: {rate:.2f} patents/sec | "
-                f"⌛ ETA: {timedelta(seconds=int(eta_seconds))}"
-            )
-
-        if len(results) % CHECKPOINT_EVERY == 0:
-            temp_df = pd.DataFrame(results)
-
-            if existing_df is not None:
-                temp_df = pd.concat([existing_df, temp_df], ignore_index=True)
-
-            existing_df = reorder_columns(temp_df)
-            save_checkpoint(existing_df, OUTPUT_PATH)
-
-        sleep(SLEEP_SECONDS)
-
-    results_df = pd.DataFrame(results)
-
-    final_df = (
-        pd.concat([existing_df, results_df], ignore_index=True)
+    done_ids = (
+        set(existing_df["id"].astype(str).str.strip())
         if existing_df is not None
-        else results_df
+        else set()
     )
 
-    final_df = reorder_columns(final_df)
-    final_df = final_df.drop_duplicates(subset=["row_id"], keep="last")
-    final_df.to_csv(OUTPUT_PATH, index=False)
+    skipped = 0
+    newly_processed = 0
+    buffer: list[dict] = []
+
+    print(
+        f"🔹 Record già presenti nel file di output: {len(done_ids.intersection(current_ids))}"
+    )
+    print(f"🔹 Totale record input da considerare: {total}")
+
+    try:
+        for _, row in patents_df.iterrows():
+            patent_id = str(row["id"]).strip()
+
+            if patent_id in done_ids:
+                skipped += 1
+                continue
+
+            result, top_k_df = classify_single_patent(
+                row=row,
+                nace_embeddings_df=nace_embeddings_df,
+                client=client,
+                valid_codes=valid_codes,
+            )
+
+            output_row = build_output_row(row, result, top_k_df)
+            buffer.append(output_row)
+
+            done_ids.add(patent_id)
+            newly_processed += 1
+
+            completed = len(done_ids.intersection(current_ids))
+
+            if completed % LOG_EVERY == 0 or newly_processed == 1 or completed == total:
+                elapsed = time.time() - start_time
+                rate = newly_processed / elapsed if elapsed > 0 else 0
+                remaining = total - completed
+                eta_seconds = remaining / rate if rate > 0 else 0
+
+                print(
+                    f"📊 Progress: {completed}/{total} "
+                    f"({completed/total:.1%}) | "
+                    f"nuovi: {newly_processed} | "
+                    f"skipped: {skipped} | "
+                    f"⏱ elapsed: {timedelta(seconds=int(elapsed))} | "
+                    f"🚀 rate: {rate:.2f} patents/sec | "
+                    f"⌛ ETA: {timedelta(seconds=int(eta_seconds))}"
+                )
+
+            if len(buffer) >= CHECKPOINT_EVERY:
+                append_checkpoint(buffer, OUTPUT_PATH)
+                buffer = []
+
+            sleep(SLEEP_SECONDS)
+
+    except KeyboardInterrupt:
+        print("\n⚠️ Interruzione manuale rilevata.")
+        if buffer:
+            append_checkpoint(buffer, OUTPUT_PATH)
+            buffer = []
+        print(
+            "🟡 Buffer salvato. Alla prossima esecuzione il resume ripartirà dal CSV."
+        )
+        raise
+
+    except Exception as e:
+        print(f"\n❌ Errore durante l'elaborazione: {e}")
+        if buffer:
+            append_checkpoint(buffer, OUTPUT_PATH)
+            buffer = []
+        print(
+            "🟡 Buffer salvato prima dell'uscita. Il resume userà il CSV già scritto."
+        )
+        raise
+
+    if buffer:
+        append_checkpoint(buffer, OUTPUT_PATH)
+
+    final_df = save_final_snapshot(OUTPUT_PATH)
 
     print(f"✅ Completato. File salvato in: {OUTPUT_PATH}")
-    print(f"📦 Numero record classificati in questa run: {len(results_df)}")
-    print(f"📁 Totale record nel file finale: {len(final_df)}")
+    print(f"📦 Numero record classificati in questa run: {newly_processed}")
+    print(f"⏭️ Record già presenti e saltati: {skipped}")
+
+    if final_df is not None:
+        print(f"📁 Totale record nel file finale: {len(final_df)}")
 
 
 if __name__ == "__main__":
