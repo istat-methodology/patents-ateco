@@ -47,6 +47,7 @@ COLUMN_ORDER = [
     "row_id",
     "id",
     "title",
+    "abstract",
     "year",
     "primary_code",
     "secondary_codes",
