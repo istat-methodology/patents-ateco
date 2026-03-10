@@ -88,6 +88,7 @@ def load_existing_results(path: str):
                     "row_id": "Int64",
                     "id": str,
                     "title": str,
+                    "abstract": str,
                     "year": str,
                     "primary_code": str,
                     "secondary_codes": str,
@@ -248,6 +249,7 @@ def main():
         result["row_id"] = row_id
         result["id"] = str(row["id"]).strip()
         result["title"] = str(row["title"]).strip()
+        result["abstract"] = str(row["abstract"]).strip()
         result["year"] = str(row.get("year", "")).strip()
         result["primary_code"] = str(result.get("primary_code", "")).strip()
         result["secondary_codes"] = serialize_secondary_codes(
