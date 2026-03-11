@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
+from FlagEmbedding import BGEM3FlagModel
 
 from utils.config import (
     EMBEDDING_BATCH_SIZE,
@@ -93,28 +93,35 @@ def load_nace_preprocessed() -> pd.DataFrame:
     return nace_df
 
 
-def load_model() -> SentenceTransformer:
+def load_model() -> BGEM3FlagModel:
     print(f"Loading open embedding model: {OPEN_EMBEDDING_MODEL_NAME}")
-    return SentenceTransformer(OPEN_EMBEDDING_MODEL_NAME)
+    return BGEM3FlagModel(
+        OPEN_EMBEDDING_MODEL_NAME,
+        use_fp16=False,
+    )
 
 
 def embed_texts(
-    model: SentenceTransformer,
+    model: BGEM3FlagModel,
     texts: list[str],
     batch_size: int = EMBEDDING_BATCH_SIZE,
+    max_length: int = 2048,
 ) -> np.ndarray:
-    embeddings = model.encode(
+    output = model.encode(
         texts,
         batch_size=batch_size,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+        max_length=max_length,
+        return_dense=True,
+        return_sparse=False,
+        return_colbert_vecs=False,
     )
-    return embeddings.astype(np.float32)
+
+    embeddings = output["dense_vecs"]
+    return np.asarray(embeddings, dtype=np.float32)
 
 
 def build_patent_embeddings(
-    model: SentenceTransformer,
+    model: BGEM3FlagModel,
     patents_df: pd.DataFrame,
 ) -> pd.DataFrame:
     print("Generating patent embeddings...")
@@ -132,7 +139,7 @@ def build_patent_embeddings(
 
 
 def build_nace_embeddings(
-    model: SentenceTransformer,
+    model: BGEM3FlagModel,
     nace_df: pd.DataFrame,
 ) -> pd.DataFrame:
     print("Generating NACE embeddings...")
@@ -191,7 +198,7 @@ def load_cached_nace_embeddings(path: Path) -> pd.DataFrame:
     return df
 
 
-def get_or_build_patent_embeddings(model: SentenceTransformer) -> pd.DataFrame:
+def get_or_build_patent_embeddings(model: BGEM3FlagModel) -> pd.DataFrame:
     if PATENT_OPEN_EMBEDDINGS_PATH.exists() and not RECOMPUTE_EMBEDDINGS:
         df = load_cached_patent_embeddings(PATENT_OPEN_EMBEDDINGS_PATH)
 
@@ -212,7 +219,7 @@ def get_or_build_patent_embeddings(model: SentenceTransformer) -> pd.DataFrame:
     return patent_embeddings_df
 
 
-def get_or_build_nace_embeddings(model: SentenceTransformer) -> pd.DataFrame:
+def get_or_build_nace_embeddings(model: BGEM3FlagModel) -> pd.DataFrame:
     if NACE_OPEN_EMBEDDINGS_PATH.exists() and not RECOMPUTE_EMBEDDINGS:
         df = load_cached_nace_embeddings(NACE_OPEN_EMBEDDINGS_PATH)
 
