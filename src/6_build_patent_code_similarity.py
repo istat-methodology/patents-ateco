@@ -72,7 +72,7 @@ def load_nace_preprocessed() -> pd.DataFrame:
     print("Loading NACE preprocessed data...")
     nace_df = pd.read_parquet(NACE_PREPROCESSED_PATH)
 
-    required_columns = {"CODE", "title", "text"}
+    required_columns = {"code", "title", "text"}
     missing = required_columns - set(nace_df.columns)
     if missing:
         raise ValueError(
@@ -80,7 +80,7 @@ def load_nace_preprocessed() -> pd.DataFrame:
         )
 
     nace_df = nace_df.copy()
-    nace_df["CODE"] = nace_df["CODE"].astype(str)
+    nace_df["code"] = nace_df["code"].astype(str)
     nace_df["title"] = nace_df["title"].astype(str).str.strip()
     nace_df["text"] = nace_df["text"].astype(str).str.strip()
 
@@ -149,7 +149,7 @@ def build_nace_embeddings(
         batch_size=EMBEDDING_BATCH_SIZE,
     )
 
-    out_df = nace_df[["CODE", "title", "text"]].copy()
+    out_df = nace_df[["code", "title", "text"]].copy()
     out_df["embedding"] = [emb for emb in embeddings]
     out_df["embedding_model"] = OPEN_EMBEDDING_MODEL_NAME
 
@@ -181,7 +181,7 @@ def load_cached_nace_embeddings(path: Path) -> pd.DataFrame:
     print(f"Loading cached NACE embeddings from: {path}")
     df = pd.read_parquet(path)
 
-    required_columns = {"CODE", "title", "text", "embedding", "embedding_model"}
+    required_columns = {"code", "title", "text", "embedding", "embedding_model"}
     missing = required_columns - set(df.columns)
     if missing:
         raise ValueError(
@@ -189,7 +189,7 @@ def load_cached_nace_embeddings(path: Path) -> pd.DataFrame:
         )
 
     df = df.copy()
-    df["CODE"] = df["CODE"].astype(str)
+    df["code"] = df["code"].astype(str)
     df["title"] = df["title"].astype(str)
     df["text"] = df["text"].astype(str)
     df["embedding_model"] = df["embedding_model"].astype(str)
@@ -295,7 +295,7 @@ def compute_similarity_topk(
             rows.append(
                 {
                     "id": patent_id,
-                    "CODE": nace_codes[int(code_idx)],
+                    "code": nace_codes[int(code_idx)],
                     "dens_sim": float(score),
                     "rank": rank,
                 }
@@ -328,7 +328,7 @@ def summarize_similarity_df(similarity_df: pd.DataFrame) -> dict:
             int(similarity_df["id"].nunique()) if not similarity_df.empty else 0
         ),
         "n_codes": (
-            int(similarity_df["CODE"].nunique()) if not similarity_df.empty else 0
+            int(similarity_df["code"].nunique()) if not similarity_df.empty else 0
         ),
         "dens_sim_min": (
             float(similarity_df["dens_sim"].min()) if not similarity_df.empty else None
@@ -357,11 +357,11 @@ def main() -> None:
         print(f"- {key}: {value}")
 
     print("\nNACE embeddings summary:")
-    for key, value in summarize_embeddings_df(nace_embeddings_df, "CODE").items():
+    for key, value in summarize_embeddings_df(nace_embeddings_df, "code").items():
         print(f"- {key}: {value}")
 
     patent_ids, patent_matrix = embeddings_df_to_matrix(patent_embeddings_df, "id")
-    nace_codes, nace_matrix = embeddings_df_to_matrix(nace_embeddings_df, "CODE")
+    nace_codes, nace_matrix = embeddings_df_to_matrix(nace_embeddings_df, "code")
 
     similarity_df = compute_similarity_topk(
         patent_ids=patent_ids,
