@@ -1,8 +1,10 @@
 import os
-import math
+
 import pandas as pd
-from dotenv import load_dotenv
 from datasets import load_dataset
+from dotenv import load_dotenv
+
+from utils.config import PATENTS_SAMPLE_PATH, ensure_directories
 
 load_dotenv()
 
@@ -11,7 +13,6 @@ DATASET_NAME = "istat-ai/ai-patents"
 SPLIT = "train"
 SAMPLE_FRAC = 0.20
 MIN_ABSTRACT_LEN = 30
-OUTPUT_FILE = "patents_sample_20pct_stratified_by_year.csv"
 
 
 def get_year(row):
@@ -94,7 +95,6 @@ def collect_sample(targets):
 
         selected_per_year[year] += 1
 
-        # stop anticipato: se tutti gli anni hanno raggiunto il target, ci fermiamo
         if all(selected_per_year[y] >= targets[y] for y in targets):
             break
 
@@ -102,6 +102,8 @@ def collect_sample(targets):
 
 
 if __name__ == "__main__":
+    ensure_directories()
+
     print("Conteggio record validi per anno...")
     counts = count_valid_records_by_year()
 
@@ -116,11 +118,11 @@ if __name__ == "__main__":
         print(year, targets[year])
 
     print("\nRaccolta sample stratificato...")
-    sample_df, selected = collect_sample(targets)
+    sample_df, _ = collect_sample(targets)
 
-    sample_df.to_csv(OUTPUT_FILE, index=False)
+    sample_df.to_csv(PATENTS_SAMPLE_PATH, index=False)
 
-    print(f"\nFile salvato: {OUTPUT_FILE}")
+    print(f"\nFile salvato: {PATENTS_SAMPLE_PATH}")
     print(f"Numero record salvati: {len(sample_df)}")
 
     print("\nDistribuzione sample:")
