@@ -1,68 +1,33 @@
-import os
-
 import pandas as pd
-from datasets import load_dataset
-from dotenv import load_dotenv
 
-from utils.config import PATENTS_SAMPLE_PATH, ensure_directories
+from utils.config import (
+    PATENTS_FILTERED_PATH,
+    PATENTS_SAMPLE_PATH,
+    ensure_directories,
+)
 
-load_dotenv()
-
-HF_TOKEN = os.getenv("HF_TOKEN")
-DATASET_NAME = "istat-ai/ai-patents"
-SPLIT = "train"
 SAMPLE_FRAC = 0.20
-MIN_ABSTRACT_LEN = 30
 
 
-def get_year(row):
-    priority_date = pd.to_datetime(row.get("priority date"), errors="coerce")
-    grant_date = pd.to_datetime(row.get("grant date"), errors="coerce")
+def load_filtered_patents() -> pd.DataFrame:
+    df = pd.read_parquet(PATENTS_FILTERED_PATH)
 
-    if pd.notna(priority_date):
-        return int(priority_date.year)
-    if pd.notna(grant_date):
-        return int(grant_date.year)
-    return None
+    required_columns = {"id", "title", "abstract", "grant_date", "year"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Il file filtrato non contiene le colonne richieste: {sorted(missing)}"
+        )
 
-
-def is_valid_record(row):
-    if row.get("ita_only") != 0:
-        return False
-
-    abstract = row.get("abstract")
-    if abstract is None:
-        return False
-
-    abstract = str(abstract).strip()
-    if len(abstract) <= MIN_ABSTRACT_LEN:
-        return False
-
-    year = get_year(row)
-    if year is None:
-        return False
-
-    return True
+    return df
 
 
-def stream_dataset():
-    return load_dataset(DATASET_NAME, split=SPLIT, streaming=True, token=HF_TOKEN)
+def count_records_by_year(df: pd.DataFrame) -> dict[int, int]:
+    counts = df["year"].value_counts().sort_index().to_dict()
+    return {int(year): int(count) for year, count in counts.items()}
 
 
-def count_valid_records_by_year():
-    counts = {}
-
-    for row in stream_dataset():
-        if not is_valid_record(row):
-            continue
-
-        year = get_year(row)
-        counts[year] = counts.get(year, 0) + 1
-
-    return counts
-
-
-def build_targets(counts, frac=0.20):
+def build_targets(counts: dict[int, int], frac: float = SAMPLE_FRAC) -> dict[int, int]:
     targets = {}
     for year, count in counts.items():
         target = max(1, int(round(count * frac)))
@@ -70,55 +35,51 @@ def build_targets(counts, frac=0.20):
     return targets
 
 
-def collect_sample(targets):
-    collected = []
-    selected_per_year = {year: 0 for year in targets}
+def collect_sample(
+    df: pd.DataFrame,
+    targets: dict[int, int],
+) -> tuple[pd.DataFrame, dict[int, int]]:
+    sampled_parts = []
+    selected_per_year = {}
 
-    for row in stream_dataset():
-        if not is_valid_record(row):
-            continue
+    for year in sorted(targets):
+        year_df = df[df["year"] == year]
+        n_target = targets[year]
 
-        year = get_year(row)
+        sampled_year_df = year_df.sample(n=n_target, random_state=42)
 
-        if selected_per_year[year] >= targets[year]:
-            continue
+        sampled_parts.append(sampled_year_df)
+        selected_per_year[year] = len(sampled_year_df)
 
-        collected.append(
-            {
-                "id": row.get("id"),
-                "title": row.get("title"),
-                "grant_date": row.get("grant date"),
-                "abstract": row.get("abstract"),
-                "year": year,
-            }
-        )
+    sample_df = pd.concat(sampled_parts, ignore_index=True)
+    sample_df = sample_df.sort_values(["year", "id"]).reset_index(drop=True)
 
-        selected_per_year[year] += 1
-
-        if all(selected_per_year[y] >= targets[y] for y in targets):
-            break
-
-    return pd.DataFrame(collected), selected_per_year
+    return sample_df, selected_per_year
 
 
 if __name__ == "__main__":
     ensure_directories()
 
-    print("Conteggio record validi per anno...")
-    counts = count_valid_records_by_year()
+    print("Caricamento dataset filtrato...")
+    patents_df = load_filtered_patents()
 
-    print("Distribuzione completa:")
+    print(f"File sorgente: {PATENTS_FILTERED_PATH}")
+    print(f"Numero record disponibili: {len(patents_df)}")
+
+    counts = count_records_by_year(patents_df)
+
+    print("\nDistribuzione completa:")
     for year in sorted(counts):
         print(year, counts[year])
 
     targets = build_targets(counts, frac=SAMPLE_FRAC)
 
-    print("\nTarget sample 20% per anno:")
+    print(f"\nTarget sample {int(SAMPLE_FRAC * 100)}% per anno:")
     for year in sorted(targets):
         print(year, targets[year])
 
     print("\nRaccolta sample stratificato...")
-    sample_df, _ = collect_sample(targets)
+    sample_df, selected_per_year = collect_sample(patents_df, targets)
 
     sample_df.to_csv(PATENTS_SAMPLE_PATH, index=False)
 
@@ -127,3 +88,7 @@ if __name__ == "__main__":
 
     print("\nDistribuzione sample:")
     print(sample_df["year"].value_counts().sort_index())
+
+    print("\nRecord selezionati per anno:")
+    for year in sorted(selected_per_year):
+        print(year, selected_per_year[year])

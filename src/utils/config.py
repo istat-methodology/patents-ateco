@@ -15,7 +15,10 @@ CLASSIFICATION_DIR = RESOURCES_DIR / "classification"
 
 # File input principali
 PATENTS_SAMPLE_PATH = RAW_DIR / "patents_sample_20pct_stratified_by_year.csv"
+PATENTS_FILTERED_PATH = RAW_DIR / "patents_filtered.parquet"
+
 NACE_SOURCE_PATH = CLASSIFICATION_DIR / "NACE_Rev2_1_Structure_Explanatory_Notes.xlsx"
+
 
 # File intermedi
 NACE_PREPROCESSED_PATH = INTERIM_DIR / "nace_level4_preprocessed.parquet"
