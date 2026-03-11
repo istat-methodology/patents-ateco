@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Root del progetto: patents-ateco/
@@ -25,9 +26,27 @@ NACE_PREPROCESSED_PATH = INTERIM_DIR / "nace_level4_preprocessed.parquet"
 NACE_EMBEDDINGS_PATH = INTERIM_DIR / "nace_level4_embeddings.parquet"
 PATENTS_CANDIDATES_PATH = INTERIM_DIR / "patents_candidates_topk.parquet"
 
+PATENT_OPEN_EMBEDDINGS_PATH = INTERIM_DIR / "patent_filtered_open_embeddings.parquet"
+NACE_OPEN_EMBEDDINGS_PATH = INTERIM_DIR / "nace_open_embeddings.parquet"
+PATENT_CODE_SIMILARITY_PATH = INTERIM_DIR / "patent_filtered_code_similarity.parquet"
+
+OPEN_EMBEDDING_MODEL_NAME = os.getenv(
+    "OPEN_EMBEDDING_MODEL_NAME",
+    "BAAI/bge-m3",
+)
+
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
+SIMILARITY_TOP_K = int(os.getenv("SIMILARITY_TOP_K", "20"))
+RECOMPUTE_EMBEDDINGS = os.getenv("RECOMPUTE_EMBEDDINGS", "0") == "1"
+
+
 # File output
 PREDICTIONS_TEST_PATH = PROCESSED_DIR / "patents_ateco_predictions_test.csv"
 PREDICTIONS_PATH = PROCESSED_DIR / "patents_ateco_predictions.csv"
+
+
+# Analysis
+PATENT_CODE_SIMILARITY_PATH = INTERIM_DIR / "patents_filtered_code_similarity.parquet"
 
 
 def ensure_directories() -> None:
