@@ -363,6 +363,11 @@ def main() -> None:
     patent_ids, patent_matrix = embeddings_df_to_matrix(patent_embeddings_df, "id")
     nace_codes, nace_matrix = embeddings_df_to_matrix(nace_embeddings_df, "code")
 
+    # Determine top_k
+    top_k = SIMILARITY_TOP_K
+    if top_k is None:
+        top_k = len(nace_codes)
+
     similarity_df = compute_similarity_topk(
         patent_ids=patent_ids,
         patent_embeddings=patent_matrix,

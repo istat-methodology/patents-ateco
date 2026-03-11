@@ -36,7 +36,10 @@ OPEN_EMBEDDING_MODEL_NAME = os.getenv(
 )
 
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
-SIMILARITY_TOP_K = int(os.getenv("SIMILARITY_TOP_K", "20"))
+
+raw_top_k = os.getenv("SIMILARITY_TOP_K", "20")
+SIMILARITY_TOP_K = None if raw_top_k.lower() == "none" else int(raw_top_k)
+
 RECOMPUTE_EMBEDDINGS = os.getenv("RECOMPUTE_EMBEDDINGS", "0") == "1"
 
 
