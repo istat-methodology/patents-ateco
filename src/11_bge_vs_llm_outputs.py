@@ -155,7 +155,7 @@ def plot_accuracy_vs_confidence():
 
     plt.xlabel("Semantic confidence quintile (Q1 = lowest, Q5 = highest)")
     plt.ylabel("Top-1 accuracy")
-    plt.title("Accuracy vs semantic confidence")
+    plt.title("Top-1 accuracy vs semantic confidence (BGE-M3)")
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
@@ -163,6 +163,39 @@ def plot_accuracy_vs_confidence():
     plt.close()
 
     print("Confidence figure saved")
+
+
+def plot_gap_distribution_correct_vs_wrong():
+
+    df = pd.read_parquet(PATENT_LEVEL_PATH)
+
+    df = df[df["gap_top1_top2"].notna()].copy()
+
+    correct = df[df["top1_correct"]]["gap_top1_top2"]
+    wrong = df[~df["top1_correct"]]["gap_top1_top2"]
+
+    plt.figure(figsize=(7, 5))
+
+    plt.hist(wrong, bins=50, alpha=0.5, density=True, label="Incorrect predictions")
+
+    plt.hist(correct, bins=50, alpha=0.5, density=True, label="Correct predictions")
+
+    plt.xlabel("Semantic confidence (top1 similarity − top2 similarity)")
+    plt.ylabel("Density")
+
+    plt.title(
+        "Distribution of semantic confidence for correct vs incorrect predictions"
+    )
+
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    plt.savefig(FIG_DIR / "confidence_correct_vs_wrong.png", dpi=300)
+    plt.close()
+
+    print("Confidence distribution figure saved")
 
 
 # ---------------------------------------------------------
@@ -179,6 +212,8 @@ def main():
     plot_hit_at_k()
 
     plot_accuracy_vs_confidence()
+
+    plot_gap_distribution_correct_vs_wrong()
 
     print("All paper outputs generated.")
 
