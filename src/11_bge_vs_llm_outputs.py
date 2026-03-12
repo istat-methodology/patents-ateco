@@ -198,6 +198,33 @@ def plot_gap_distribution_correct_vs_wrong():
     print("Confidence distribution figure saved")
 
 
+def plot_confidence_calibration():
+
+    df = pd.read_parquet(PATENT_LEVEL_PATH)
+
+    df["confidence"] = df["gap_top1_top2"]
+
+    thresholds = np.linspace(0, df["confidence"].max(), 50)
+
+    accuracies = []
+    coverages = []
+
+    for t in thresholds:
+
+        subset = df[df["confidence"] >= t]
+
+        if len(subset) == 0:
+            accuracies.append(np.nan)
+            coverages.append(0)
+            continue
+
+        accuracy = subset["top1_correct"].mean()
+        coverage = len(subset) / len(df)
+
+        accuracies.append(accuracy)
+        coverages.append(coverage)
+
+
 # ---------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------
@@ -214,6 +241,8 @@ def main():
     plot_accuracy_vs_confidence()
 
     plot_gap_distribution_correct_vs_wrong()
+
+    plot_confidence_calibration()
 
     print("All paper outputs generated.")
 
