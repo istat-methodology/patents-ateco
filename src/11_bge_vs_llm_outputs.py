@@ -116,31 +116,49 @@ def plot_accuracy_vs_confidence():
     df = pd.read_parquet(PATENT_LEVEL_PATH)
 
     df["confidence"] = df["gap_top1_top2"]
-
-    df = df[df["confidence"].notna()]
+    df = df[df["confidence"].notna()].copy()
 
     df["quantile"] = pd.qcut(df["confidence"], 5, labels=False)
 
-    accuracy_by_q = df.groupby("quantile")["top1_correct"].mean().reset_index()
+    accuracy_by_q = (
+        df.groupby("quantile")["top1_correct"]
+        .agg(["mean", "count"])
+        .reset_index()
+        .rename(columns={"mean": "accuracy", "count": "n"})
+    )
+
+    # standard error for a binomial proportion
+    accuracy_by_q["se"] = np.sqrt(
+        accuracy_by_q["accuracy"] * (1 - accuracy_by_q["accuracy"]) / accuracy_by_q["n"]
+    )
+
+    # 95% confidence interval
+    accuracy_by_q["ci95"] = 1.96 * accuracy_by_q["se"]
+
+    x = accuracy_by_q["quantile"] + 1
+    y = accuracy_by_q["accuracy"]
+    yerr = accuracy_by_q["ci95"]
 
     plt.figure(figsize=(7, 5))
 
-    plt.plot(
-        accuracy_by_q["quantile"] + 1,
-        accuracy_by_q["top1_correct"],
-        marker="o",
+    plt.errorbar(
+        x,
+        y,
+        yerr=yerr,
+        fmt="-o",
         linewidth=2,
+        capsize=4,
     )
 
-    plt.xlabel("Semantic confidence quintile")
+    plt.xticks([1, 2, 3, 4, 5], ["Q1", "Q2", "Q3", "Q4", "Q5"])
+    plt.xlim(0.8, 5.2)
+
+    plt.xlabel("Semantic confidence quintile (Q1 = lowest, Q5 = highest)")
     plt.ylabel("Top-1 accuracy")
-
     plt.title("Accuracy vs semantic confidence")
-
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
-
     plt.savefig(CONFIDENCE_FIG, dpi=300)
     plt.close()
 
