@@ -16,6 +16,8 @@ from utils.config import (
 
 FIGURES_DIR = ANALYSIS_DIR / "figures"
 
+GLOBAL_SIM_MEAN = 0.431622
+
 
 def ensure_figure_directory() -> None:
     ensure_directories()
@@ -206,6 +208,29 @@ def plot_similarity_percentiles(rank_df: pd.DataFrame, max_rank: int = 200):
         plot_df["dens_sim_p75"],
         alpha=0.25,
         label="Interquartile range (p25–p75)",
+    )
+
+    # baseline
+    ax.axhline(
+        GLOBAL_SIM_MEAN,
+        linestyle="--",
+        linewidth=1.5,
+        label=f"Global similarity baseline = {GLOBAL_SIM_MEAN:.3f}",
+    )
+
+    ax.annotate(
+        f"{plot_df['dens_sim_median'].iloc[0]:.3f}",
+        (plot_df["rank"].iloc[0], plot_df["dens_sim_median"].iloc[0]),
+        xytext=(10, 10),
+        textcoords="offset points",
+    )
+
+    # marker rank1
+    ax.scatter(
+        plot_df["rank"].iloc[0],
+        plot_df["dens_sim_median"].iloc[0],
+        s=60,
+        zorder=5,
     )
 
     ax.set_title(
