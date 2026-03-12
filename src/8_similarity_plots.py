@@ -297,6 +297,8 @@ def plot_semantic_confidence_ecdf(top12_df: pd.DataFrame) -> None:
     ax.set_xlabel("Semantic confidence (top-1 similarity - top-2 similarity)")
     ax.set_ylabel("Cumulative share of patents")
 
+    ax.set_xlim(0, 0.07)
+
     ax.grid(True, linestyle="--", alpha=0.4)
     ax.legend()
 
