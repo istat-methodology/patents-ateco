@@ -187,6 +187,46 @@ def plot_gap_distribution(top12_df: pd.DataFrame) -> None:
     print(f"Figure saved to: {output_path}")
 
 
+def plot_similarity_percentiles(rank_df: pd.DataFrame, max_rank: int = 200):
+
+    plot_df = rank_df[rank_df["rank"] <= max_rank].copy()
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.plot(
+        plot_df["rank"],
+        plot_df["dens_sim_median"],
+        linewidth=2,
+        label="Median similarity",
+    )
+
+    ax.fill_between(
+        plot_df["rank"],
+        plot_df["dens_sim_p25"],
+        plot_df["dens_sim_p75"],
+        alpha=0.25,
+        label="Interquartile range (p25–p75)",
+    )
+
+    ax.set_title(
+        f"Semantic similarity percentiles across ranking positions (Top-{max_rank})"
+    )
+    ax.set_xlabel("Rank")
+    ax.set_ylabel("Cosine similarity")
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    fig.tight_layout()
+
+    output_path = FIGURES_DIR / "semantic_similarity_percentiles_top200.png"
+
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Figure saved to: {output_path}")
+
+
 def main() -> None:
     ensure_figure_directory()
 
@@ -199,6 +239,8 @@ def main() -> None:
     plot_similarity_vs_rank(rank_df, global_mean=global_mean, max_rank=200)
     plot_top1_similarity_distribution(top12_df)
     plot_gap_distribution(top12_df)
+
+    plot_similarity_percentiles(rank_df, max_rank=200)
 
 
 if __name__ == "__main__":
