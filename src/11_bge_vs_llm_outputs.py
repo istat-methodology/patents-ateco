@@ -198,31 +198,110 @@ def plot_gap_distribution_correct_vs_wrong():
     print("Confidence distribution figure saved")
 
 
-def plot_confidence_calibration():
+def plot_confidence_calibration() -> None:
+    """
+    Plot selective accuracy and coverage as a function of the semantic confidence threshold.
 
+    Semantic confidence is defined as:
+        gap_top1_top2 = top1_similarity - top2_similarity
+
+    For each threshold t, the function computes:
+        - accuracy among patents with confidence >= t
+        - coverage, i.e. share of patents with confidence >= t
+    """
     df = pd.read_parquet(PATENT_LEVEL_PATH)
 
-    df["confidence"] = df["gap_top1_top2"]
+    required_columns = {"gap_top1_top2", "top1_correct"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Patent-level evaluation file missing required columns: {sorted(missing)}"
+        )
 
-    thresholds = np.linspace(0, df["confidence"].max(), 50)
+    df = df.copy()
+    df = df[df["gap_top1_top2"].notna()].reset_index(drop=True)
 
-    accuracies = []
-    coverages = []
+    if df.empty:
+        raise ValueError("No valid rows found for confidence calibration plot.")
+
+    df["confidence"] = pd.to_numeric(df["gap_top1_top2"], errors="raise")
+    df["top1_correct"] = df["top1_correct"].astype(bool)
+
+    # Build thresholds over the observed confidence range
+    max_conf = float(df["confidence"].max())
+    thresholds = np.linspace(0.0, max_conf, 50)
+
+    rows = []
+    total_n = len(df)
 
     for t in thresholds:
-
         subset = df[df["confidence"] >= t]
 
-        if len(subset) == 0:
-            accuracies.append(np.nan)
-            coverages.append(0)
+        if subset.empty:
+            rows.append(
+                {
+                    "threshold": float(t),
+                    "accuracy": np.nan,
+                    "coverage": 0.0,
+                    "n_patents": 0,
+                }
+            )
             continue
 
-        accuracy = subset["top1_correct"].mean()
-        coverage = len(subset) / len(df)
+        accuracy = float(subset["top1_correct"].mean())
+        coverage = float(len(subset) / total_n)
 
-        accuracies.append(accuracy)
-        coverages.append(coverage)
+        rows.append(
+            {
+                "threshold": float(t),
+                "accuracy": accuracy,
+                "coverage": coverage,
+                "n_patents": int(len(subset)),
+            }
+        )
+
+    calibration_df = pd.DataFrame(rows)
+
+    # Optional: save table for later inspection
+    calibration_output = TAB_DIR / "confidence_calibration_curve.csv"
+    calibration_df.to_csv(calibration_output, index=False)
+
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+
+    ax1.plot(
+        calibration_df["threshold"],
+        calibration_df["accuracy"],
+        linewidth=2,
+        label="Selective accuracy",
+    )
+    ax1.set_xlabel("Semantic confidence threshold")
+    ax1.set_ylabel("Top-1 accuracy")
+    ax1.grid(True, linestyle="--", alpha=0.3)
+
+    ax2 = ax1.twinx()
+    ax2.plot(
+        calibration_df["threshold"],
+        calibration_df["coverage"],
+        linestyle="--",
+        linewidth=2,
+        label="Coverage",
+    )
+    ax2.set_ylabel("Coverage")
+
+    ax1.set_title("Confidence calibration curve")
+
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc="center right")
+
+    fig.tight_layout()
+
+    output_path = FIG_DIR / "confidence_calibration_curve.png"
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Confidence calibration figure saved to: {output_path}")
+    print(f"Calibration table saved to: {calibration_output}")
 
 
 # ---------------------------------------------------------
