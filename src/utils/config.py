@@ -46,6 +46,8 @@ RECOMPUTE_EMBEDDINGS = os.getenv("RECOMPUTE_EMBEDDINGS", "0") == "1"
 PREDICTIONS_TEST_PATH = PROCESSED_DIR / "patents_ateco_predictions_test.csv"
 PREDICTIONS_PATH = PROCESSED_DIR / "patents_ateco_predictions.csv"
 
+LLM_LABELLED_PATH = PROCESSED_DIR / "patents_ateco_predictions.csv"
+
 
 # Analysis
 PATENT_CODE_SIMILARITY_PATH = INTERIM_DIR / "patents_filtered_code_similarity.parquet"
