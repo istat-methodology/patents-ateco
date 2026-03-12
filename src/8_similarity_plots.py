@@ -252,6 +252,63 @@ def plot_similarity_percentiles(rank_df: pd.DataFrame, max_rank: int = 200):
     print(f"Figure saved to: {output_path}")
 
 
+def plot_semantic_confidence_ecdf(top12_df: pd.DataFrame) -> None:
+    gap = top12_df["gap_top1_top2"].sort_values().reset_index(drop=True)
+    y = (gap.index + 1) / len(gap)
+
+    median_gap = float(top12_df["gap_top1_top2"].median())
+    mean_gap = float(top12_df["gap_top1_top2"].mean())
+    p90_gap = float(top12_df["gap_top1_top2"].quantile(0.90))
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.plot(
+        gap,
+        y,
+        linewidth=2,
+        label="Empirical cumulative distribution",
+    )
+
+    ax.axvline(
+        median_gap,
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.9,
+        label=f"Median = {median_gap:.3f}",
+    )
+
+    ax.axvline(
+        mean_gap,
+        linestyle=":",
+        linewidth=1.5,
+        alpha=0.9,
+        label=f"Mean = {mean_gap:.3f}",
+    )
+
+    ax.axvline(
+        p90_gap,
+        linestyle="-.",
+        linewidth=1.5,
+        alpha=0.9,
+        label=f"P90 = {p90_gap:.3f}",
+    )
+
+    ax.set_title("Semantic confidence based on top-1 vs top-2 separation")
+    ax.set_xlabel("Semantic confidence (top-1 similarity - top-2 similarity)")
+    ax.set_ylabel("Cumulative share of patents")
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    fig.tight_layout()
+
+    output_path = FIGURES_DIR / "semantic_confidence_ecdf.png"
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Figure saved to: {output_path}")
+
+
 def main() -> None:
     ensure_figure_directory()
 
@@ -266,6 +323,8 @@ def main() -> None:
     plot_gap_distribution(top12_df)
 
     plot_similarity_percentiles(rank_df, max_rank=200)
+
+    plot_semantic_confidence_ecdf(top12_df)
 
 
 if __name__ == "__main__":
