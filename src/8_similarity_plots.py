@@ -8,6 +8,7 @@ import pandas as pd
 from utils.config import (
     ANALYSIS_DIR,
     PATENT_TOP12_GAP_PATH,
+    SIMILARITY_GLOBAL_STATS_PATH,
     SIMILARITY_RANK_STATS_PATH,
     ensure_directories,
 )
@@ -34,6 +35,21 @@ def load_rank_stats() -> pd.DataFrame:
     return df
 
 
+def load_global_stats() -> pd.DataFrame:
+    print(f"Loading global statistics from: {SIMILARITY_GLOBAL_STATS_PATH}")
+
+    df = pd.read_csv(SIMILARITY_GLOBAL_STATS_PATH)
+
+    required_columns = {"dens_sim_mean"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Global stats file missing required columns: {sorted(missing)}"
+        )
+
+    return df
+
+
 def load_top12_gap_data() -> pd.DataFrame:
     print(f"Loading patent-level top1/top2 data from: {PATENT_TOP12_GAP_PATH}")
 
@@ -56,57 +72,36 @@ def load_top12_gap_data() -> pd.DataFrame:
     return df
 
 
-def plot_similarity_vs_rank(rank_df: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.plot(
-        rank_df["rank"],
-        rank_df["dens_sim_mean"],
-        linewidth=2,
-        label="Mean similarity",
-    )
-
-    ax.fill_between(
-        rank_df["rank"],
-        rank_df["dens_sim_mean"] - rank_df["dens_sim_std"],
-        rank_df["dens_sim_mean"] + rank_df["dens_sim_std"],
-        alpha=0.2,
-        label="±1 std",
-    )
-
-    ax.set_title("Semantic ranking behaviour of BGE-M3 embeddings")
-    ax.set_xlabel("Rank")
-    ax.set_ylabel("Cosine similarity")
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend()
-
-    fig.tight_layout()
-
-    output_path = FIGURES_DIR / "semantic_ranking_behaviour_bge_m3.png"
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    print(f"Figure saved to: {output_path}")
-
-
-def plot_similarity_vs_rank_zoom(rank_df: pd.DataFrame, max_rank: int = 50) -> None:
-    zoom_df = rank_df[rank_df["rank"] <= max_rank].copy()
+def plot_similarity_vs_rank(
+    rank_df: pd.DataFrame,
+    global_mean: float,
+    max_rank: int = 200,
+) -> None:
+    plot_df = rank_df[rank_df["rank"] <= max_rank].copy()
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.plot(
-        zoom_df["rank"],
-        zoom_df["dens_sim_mean"],
+        plot_df["rank"],
+        plot_df["dens_sim_mean"],
         linewidth=2,
-        label="Mean similarity",
+        label="Mean similarity by rank",
     )
 
     ax.fill_between(
-        zoom_df["rank"],
-        zoom_df["dens_sim_mean"] - zoom_df["dens_sim_std"],
-        zoom_df["dens_sim_mean"] + zoom_df["dens_sim_std"],
+        plot_df["rank"],
+        plot_df["dens_sim_mean"] - plot_df["dens_sim_std"],
+        plot_df["dens_sim_mean"] + plot_df["dens_sim_std"],
         alpha=0.2,
         label="±1 std",
+    )
+
+    ax.axhline(
+        y=global_mean,
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.8,
+        label=f"Global mean = {global_mean:.3f}",
     )
 
     ax.set_title(f"Semantic ranking behaviour of BGE-M3 embeddings (Top-{max_rank})")
@@ -121,10 +116,12 @@ def plot_similarity_vs_rank_zoom(rank_df: pd.DataFrame, max_rank: int = 50) -> N
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    print(f"Zoom figure saved to: {output_path}")
+    print(f"Figure saved to: {output_path}")
 
 
 def plot_top1_similarity_distribution(top12_df: pd.DataFrame) -> None:
+    mean_top1 = top12_df["top1_similarity"].mean()
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.hist(
@@ -133,10 +130,19 @@ def plot_top1_similarity_distribution(top12_df: pd.DataFrame) -> None:
         alpha=0.8,
     )
 
+    ax.axvline(
+        x=mean_top1,
+        linestyle="--",
+        linewidth=1.8,
+        alpha=0.9,
+        label=f"Mean = {mean_top1:.3f}",
+    )
+
     ax.set_title("Distribution of top-1 cosine similarity")
     ax.set_xlabel("Top-1 cosine similarity")
     ax.set_ylabel("Number of patents")
     ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
 
     fig.tight_layout()
 
@@ -148,6 +154,8 @@ def plot_top1_similarity_distribution(top12_df: pd.DataFrame) -> None:
 
 
 def plot_gap_distribution(top12_df: pd.DataFrame) -> None:
+    mean_gap = top12_df["gap_top1_top2"].mean()
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.hist(
@@ -156,10 +164,19 @@ def plot_gap_distribution(top12_df: pd.DataFrame) -> None:
         alpha=0.8,
     )
 
+    ax.axvline(
+        x=mean_gap,
+        linestyle="--",
+        linewidth=1.8,
+        alpha=0.9,
+        label=f"Mean gap = {mean_gap:.3f}",
+    )
+
     ax.set_title("Distribution of semantic separation (top-1 vs top-2)")
     ax.set_xlabel("Gap: top-1 similarity - top-2 similarity")
     ax.set_ylabel("Number of patents")
     ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
 
     fig.tight_layout()
 
@@ -174,10 +191,12 @@ def main() -> None:
     ensure_figure_directory()
 
     rank_df = load_rank_stats()
+    global_stats_df = load_global_stats()
     top12_df = load_top12_gap_data()
 
-    plot_similarity_vs_rank(rank_df)
-    plot_similarity_vs_rank_zoom(rank_df, max_rank=50)
+    global_mean = float(global_stats_df.loc[0, "dens_sim_mean"])
+
+    plot_similarity_vs_rank(rank_df, global_mean=global_mean, max_rank=200)
     plot_top1_similarity_distribution(top12_df)
     plot_gap_distribution(top12_df)
 
