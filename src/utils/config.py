@@ -28,7 +28,6 @@ PATENTS_CANDIDATES_PATH = INTERIM_DIR / "patents_candidates_topk.parquet"
 
 PATENT_OPEN_EMBEDDINGS_PATH = INTERIM_DIR / "patent_filtered_open_embeddings.parquet"
 NACE_OPEN_EMBEDDINGS_PATH = INTERIM_DIR / "nace_open_embeddings.parquet"
-PATENT_CODE_SIMILARITY_PATH = INTERIM_DIR / "patent_filtered_code_similarity.parquet"
 
 OPEN_EMBEDDING_MODEL_NAME = os.getenv(
     "OPEN_EMBEDDING_MODEL_NAME",
@@ -50,6 +49,17 @@ PREDICTIONS_PATH = PROCESSED_DIR / "patents_ateco_predictions.csv"
 
 # Analysis
 PATENT_CODE_SIMILARITY_PATH = INTERIM_DIR / "patents_filtered_code_similarity.parquet"
+
+# Analysis outputs
+ANALYSIS_DIR = PROCESSED_DIR / "analysis"
+
+SIMILARITY_GLOBAL_STATS_PATH = ANALYSIS_DIR / "similarity_global_stats.csv"
+SIMILARITY_RANK_STATS_PATH = ANALYSIS_DIR / "similarity_rank_stats.csv"
+PATENT_TOP12_GAP_PATH = ANALYSIS_DIR / "patent_top1_top2_gap.parquet"
+GAP_STATS_PATH = ANALYSIS_DIR / "gap_stats.csv"
+TOP1_SIMILARITY_STATS_PATH = ANALYSIS_DIR / "top1_similarity_stats.csv"
+TOP1_CODE_DISTRIBUTION_PATH = ANALYSIS_DIR / "top1_code_distribution.csv"
+TOP1_CODE_CONCENTRATION_STATS_PATH = ANALYSIS_DIR / "top1_code_concentration_stats.csv"
 
 
 def ensure_directories() -> None:

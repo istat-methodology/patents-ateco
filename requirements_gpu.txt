@@ -1,6 +1,0 @@
-sentence-transformers
-torch
-pandas
-numpy
-pyarrow
-python-dotenv
